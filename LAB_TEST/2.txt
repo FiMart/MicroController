@@ -1,0 +1,234 @@
+2.จงเขียนโปรแกรม timer interrupt เพื่อนับเลข 1002-1030 แบบนับลง โดยนับเฉพาะเลขคู่ห่างกันเลขละ 1 
+วินาที แสดงผลทาง UART หรือ LCD บรรทัดละ 1 ตัวเลข สำหรับการแสดงผลบน LCD เมื่อเขียนถึงบรรทัดสุดท้ายให้วนมาเริ่ม
+เขียนที่บรรทัดแรก เมื่อกดปุ่มบนบอร์ดให้หยุดการนับชั่วคราว หลังจากกดปุ่ม 1 วินาทีให้ LED LD3 บนบอร์ดติดค้าง หลังจากกดปุ่ม 
+2 วินาทีให้ LED LD2 บนบอร์ดติดค้าง หลังจากกดปุ่ม 3 วินาทีให้ LED LD1 บนบอร์ดติดค้าง หลังจากกดปุ่ม 4 วินาทีให้ LED ทุก
+ดวงบนบอร์ดดับลง จากนั้นให้กลับมานับต่อจากค่าเดิมก่อนกดปุ่ม เมื่อนับครบ 1 รอบให้พิมพ์คำว่า STOP แล้วโปรแกรมหยุดการ
+ทำงาน ระหว่างการตรวจหากผู้ตรวจสงสัยว่าเวลาคลาดเคลื่อนมากจะทำการเปรียบเทียบกับนาฬิกาจริง
+
+ก่อนโยกสวิตช์
+1030
+1028
+1026
+กดสวิตช์ภายหลังทำงานไป
+3 วินาที
+1030
+1028
+1026
+นับต่อจากค่าเดิมหลังตอบสนอง
+ต่อ interrupt เสร็จสิ้น
+1030
+1028
+1026
+1024
+1022
+1020
+หยุดการทำงานเมื่อนับครบรอบ
+. . .
+1006
+1004
+1002
+STOP
+
+โปรแกรม timer interrupt ที่ใช้ในการนับเลขตามที่ระบุมีความซับซ้อนเนื่องจากต้องใช้นับเวลาและตรวจสอบการกดปุ่ม 4 ครั้งเพื่อควบคุม LED บนบอร์ด STM32 ในตัวอย่างนี้เราจะใช้ภาษา C และ STM32 HAL Library ในการเขียนโปรแกรม โปรแกรมนี้จะนับเลขจาก 1030 ลงมาจนถึง 1002 และจะหยุดเมื่อนับครบรอบหรือเมื่อกดปุ่ม 4 ครั้ง
+
+#include "stm32f4xx.h"
+#include "stm32f4xx_hal.h"
+#include "stdio.h"
+
+TIM_HandleTypeDef htim2;
+UART_HandleTypeDef huart2;
+
+volatile uint32_t count = 1030; // เริ่มต้นที่ 1030
+volatile uint8_t buttonPressCount = 0;
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_USART2_UART_Init(void);
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    if (count >= 1002) {
+        if (count % 2 == 0) {
+            // แสดงผลทาง UART
+            char buffer[16];
+            snprintf(buffer, sizeof(buffer), "%d\r\n", count);
+            HAL_UART_Transmit(&huart2, (uint8_t *)buffer, strlen(buffer), HAL_MAX_DELAY);
+            // แสดงผลทาง LCD (ไม่ได้ให้ตัวอย่างนี้)
+        }
+        count--;
+    } else {
+        // นับครบรอบแล้ว
+        HAL_TIM_Base_Stop_IT(&htim2);
+        HAL_UART_Transmit(&huart2, (uint8_t *)"STOP\r\n", 6, HAL_MAX_DELAY);
+    }
+}
+
+int main(void) {
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_TIM2_Init();
+    MX_USART2_UART_Init();
+
+    HAL_TIM_Base_Start_IT(&htim2);
+
+    while (1) {
+        // ตรวจสอบปุ่ม
+        if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
+            // หยุดการนับชั่วคราว
+            HAL_TIM_Base_Stop_IT(&htim2);
+
+            // รอนับเวลา 4 วินาที
+            HAL_Delay(4000);
+
+            // ตรวจสอบปุ่ม
+            if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
+                if (buttonPressCount < 3) {
+                    buttonPressCount++;
+                } else {
+                    // รีเซ็ตการนับ
+                    count = 1030;
+                    buttonPressCount = 0;
+                    HAL_TIM_Base_Start_IT(&htim2);
+                    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15, GPIO_PIN_RESET);
+                }
+            }
+
+            // รอนับเวลา 1 วินาที
+            HAL_Delay(1000);
+
+            // ตรวจสอบปุ่มอีกครั้ง
+            if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
+                if (buttonPressCount == 1) {
+                    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET); // LED LD2 ติด
+                } else if (buttonPressCount == 2) {
+                    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET); // LED LD3 ติด
+                } else if (buttonPressCount == 3) {
+                    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET); // LED LD1 ติด
+                }
+            }
+        }
+    }
+}
+
+void SystemClock_Config(void) {
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+    HAL_StatusTypeDef ret = HAL_OK;
+
+    __HAL_RCC_PWR_CLK_ENABLE();
+    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+    RCC_OscInitStruct.PLL.PLLM = 8;
+    RCC_OscInitStruct.PLL.PLLN = 50;
+    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+    RCC_OscInitStruct.PLL.PLLQ = 2;
+
+    ret = HAL_RCC_OscConfig(&RCC_OscInitStruct);
+    if (ret != HAL_OK) {
+        while (1) {
+        }
+    }
+
+    ret = HAL_PWREx_EnableOverDrive();
+    if (ret != HAL_OK) {
+        while (1) {
+        }
+    }
+
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
+                                  RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+
+    ret = HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4);
+    if (ret != HAL_OK) {
+        while (1) {
+        }
+    }
+}
+
+static void MX_TIM2_Init(void) {
+    __HAL_RCC_TIM2_CLK_ENABLE();
+
+    htim2.Instance = TIM2;
+    htim2.Init.Prescaler = 4999;
+    htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim2.Init.Period = 15999; // 1Hz
+    htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    HAL_TIM_Base_Init(&htim2);
+
+    HAL_NVIC_SetPriority(TIM2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(TIM2_IRQn);
+}
+
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim) {
+    (void)htim;
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_0;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+static void MX_USART2_UART_Init(void) {
+    __HAL_RCC_USART2_CLK_ENABLE();
+
+    huart2.Instance = USART2;
+    huart2.Init.BaudRate = 115200;
+    huart2.Init.WordLength = UART_WORDLENGTH_8B;
+    huart2.Init.StopBits = UART_STOPBITS_1;
+    huart2.Init.Parity = UART_PARITY_NONE;
+    huart2.Init.Mode = UART_MODE_TX_RX;
+    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+    HAL_UART_Init(&huart2);
+}
+
+static void MX_GPIO_Init(void) {
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    // Configure GPIO pin : PA0 (USER_BUTTON)
+    GPIO_InitStruct.Pin = GPIO_PIN_0;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    // Configure GPIO pins : PD12 PD13 PD14 PD15 (LD3, LD2, LD1, LD4)
+    GPIO_InitStruct.Pin = GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+}
+
+void HAL_TIM_MspPostDeInit(TIM_HandleTypeDef *htim) {
+    (void)htim;
+    __HAL_RCC_TIM2_CLK_DISABLE();
+}
+
+void Error_Handler(void) {
+    while (1) {
+    }
+}
+
+#ifdef  USE_FULL_ASSERT
+void assert_failed(uint8_t *file, uint32_t line) {
+    (void)file;
+    (void)line;
+}
+#endif
+
+ในโค้ดนี้เราใช้แนวคิดของ Timer interrupt เพื่อนับเลขตามที่ระบุ และใช้ GPIO ของบอร์ด STM32 เพื่อตรวจสอบปุ่มและควบคุม LED บนบอร์ดตามที่ระบุ ต้องแน่ใจว่าคุณได้ทำการเชื่อมต่อโมดูล UART หรือ LCD ให้ถูกต้องตามคำแนะนำของผู้ผลิตของบอร์ด STM32 และปรับแก้โค้ดเพื่อให้แสดงผลที่ถูกต้องบนหน้าจอของคุณ หากมีข้อสงสัยเพิ่มเติมเกี่ยวกับการเขียนโปรแกรมหรือการใช้งานบอร์ด STM32 คุณสามารถติดต่อผู้ผลิตหรือศูนย์ช่วยเหลือของบอร์ดเพิ่มเติมได้ครับ.

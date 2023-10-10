@@ -1,0 +1,153 @@
+3.จงสร้างสัญญาณ PWM (pulse-width modulation) จำนวน 1 ขา เพื่อเชื่อมต่อกับ RGB LED สีน้ำเงิน โดย
+สัญญาณ PWM ที่สร้างขึ้นมีคาบเวลา 1 ms และมี duty cycle ของช่วงที่เป็นลอจิก 1 ระหว่าง 25% - 80% สามารถปรับเพิ่มลด
+ได้ครั้งละ 5% ด้วยการหมุนตัวต้านทานปรับค่าได้จงแสดงค่า duty cycle ที่กึ่งกลางหน้าจอ LCD โดยกำหนดสีพื้นหลังและสีตัวอักษรตามค่า duty cycle ดังตารางต่อไปนี้ ใน stm32cudeide
+
+ลำดับ ค่า duty cycle สีพื้นหลัง สีตัวอักษร
+  1     25 - 45     Green  Yellow
+  2     50 - 65     Yellow Blue
+  3     70 - 80     Cyan   Red กระพริบ
+
+สำหรับการสร้างสัญญาณ PWM บนบอร์ด STM32 และแสดงค่า duty cycle บนหน้าจอ LCD ใน STM32CubeIDE ตามคำขอของคุณ คุณสามารถใช้ STM32 HAL (Hardware Abstraction Layer) เพื่อสร้างโค้ดได้ดังนี้:
+1.เริ่มต้นโปรเจคใหม่ใน STM32CubeIDE และเลือกบอร์ดที่คุณใช้.
+2.เพิ่มไลบรารี HAL_LCD และ HAL_TIM_PWM ลงในโปรเจค.
+3.ปรับแต่ง Configuration "TIM3" เพื่อตั้งค่า PWM ดังนี้:
+  Prescaler: 83 (เพื่อให้ได้คาบเวลา 1 ms)
+  Period: 1000
+4.สร้างตัวแปรสำหรับ duty cycle และค่าสีตามตารางที่กำหนด.
+5.สร้างสัญญาณ PWM โดยเปลี่ยนค่า duty cycle ให้สอดคล้องกับค่าที่กำหนดในตาราง โดยใช้ฟังก์ชัน HAL_TIM_PWM_Start().
+6.กำหนดสีพื้นหลังและสีตัวอักษรตามเงื่อนไขในตาราง.
+7.แสดงค่า duty cycle และสีบนหน้าจอ LCD.
+
+นี่คือโค้ดตัวอย่าง:
+
+#include "main.h"
+#include "stm32f4xx_hal.h"
+#include "stdio.h"
+
+TIM_HandleTypeDef htim3;
+LCD_HandleTypeDef hlcd;
+
+uint32_t dutyCycle = 25;
+char lcdMessage[20];
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_LCD_Init(void);
+
+int main(void) {
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_TIM3_Init();
+  MX_LCD_Init();
+
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+
+  while (1) {
+    if (dutyCycle >= 25 && dutyCycle <= 45) {
+      BSP_LCD_Clear(LCD_COLOR_GREEN);
+      BSP_LCD_SetTextColor(LCD_COLOR_YELLOW);
+    } else if (dutyCycle >= 50 && dutyCycle <= 65) {
+      BSP_LCD_Clear(LCD_COLOR_YELLOW);
+      BSP_LCD_SetTextColor(LCD_COLOR_BLUE);
+    } else if (dutyCycle >= 70 && dutyCycle <= 80) {
+      BSP_LCD_Clear(LCD_COLOR_CYAN);
+      BSP_LCD_SetTextColor(LCD_COLOR_RED);
+    }
+
+    sprintf(lcdMessage, "Duty Cycle: %lu%%", dutyCycle);
+    BSP_LCD_DisplayStringAtLine(1, (uint8_t *)lcdMessage);
+    HAL_Delay(1000); // รอ 1 วินาที
+
+    // เพิ่มค่า duty cycle 5% หากยังไม่ถึง 80%
+    if (dutyCycle < 80) {
+      dutyCycle += 5;
+    } else {
+      dutyCycle = 25; // รีเซ็ตค่า duty cycle เมื่อถึง 80%
+    }
+  }
+}
+
+void SystemClock_Config(void) {
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  HAL_RCC_DeInit();
+
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 100;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 4;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+    Error_Handler();
+  }
+
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK |
+                                RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK) {
+    Error_Handler();
+  }
+
+  __HAL_RCC_PWR_CLK_ENABLE();
+}
+
+static void MX_TIM3_Init(void) {
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 83; // 1 ms
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK) {
+    Error_Handler();
+  }
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK) {
+    Error_Handler();
+  }
+
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 250; // 25% duty cycle (250/1000)
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+    Error_Handler();
+  }
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) !=
+      HAL_OK) {
+    Error_Handler();
+  }
+}
+
+static void MX_LCD_Init(void) {
+  hlcd.Instance = LCD;
+  hlcd.Init.Prescaler = LCD_PRESCALER_4;
+  hlcd.Init.Divider = LCD_DIVIDER_32;
+  hlcd.Init.Duty = LCD_DUTY_1_4;
+  hlcd.Init.Bias = LCD_BIAS_1_3;
+  hlcd.Init.VoltageSource = LCD_VOLTAGESOURCE_INTERNAL;
+  if (BSP_LCD_Init() != LCD_OK) {
+    Error_Handler();
+  }
+}
+
+โค้ดนี้จะสร้างสัญญาณ PWM บนขา GPIO ที่ใช้ TIM3 บนบอร์ด STM32 และแสดงค่า duty cycle และสีบนหน้าจอ LCD ตามเงื่อนไขที่กำหนดในคำถามของคุณ. โปรแกรมจะเปลี่ยนค่า duty cycle ทุก 1 วินาทีและเริ่มที่ 25% และหากถึง 80% จะรีเซ็ตค่า duty cycle กลับไปที่ 25%.

@@ -1,0 +1,85 @@
+1.จงเขียนโปรแกรมควบคุม LED Pack ให้ได้เงื่อนไขตามที่กำหนดดังนี้
+ใน 1 รอบการทำงานแบ่งออกเป็น 4 step ดังตาราง แต่ละ step ให้LED ติดค้างนาน 500 ms แล้วดับนาน 500 ms แล้วจึงเปลี่ยน 
+step ให้โปรแกรมวนรอบไปเรื่อยๆ
+
+มี 4 step led ทั้งหมด 7 ดวง
+step 1 : LED7 และ LED0 ติด
+step 2 : LED6 และ LED1 ติด
+step 3 : LED5 และ LED2 ติด
+step 4 : LED4 และ LED3 ติด
+และวนกลับมาที่ step 1
+
+หากคุณต้องการควบคุม 7 LED ให้ทำงานตามขั้นตอนที่ระบุ และวนกลับไปที่ขั้นตอนแรกหลังจากขั้นตอนที่ 4 คุณสามารถใช้โค้ดต่อไปนี้ใน STM32CubeIDE:
+
+#include "main.h"
+#include "stm32f1xx_hal.h"
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+
+    // ตั้งค่า GPIO
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET);
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    int step = 1;
+    while (1)
+    {
+        switch (step)
+        {
+            case 1: // Step 1: LED7 และ LED0 ติด
+                HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0 | GPIO_PIN_7, GPIO_PIN_SET);
+                break;
+            case 2: // Step 2: LED6 และ LED1 ติด
+                HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1 | GPIO_PIN_6, GPIO_PIN_SET);
+                break;
+            case 3: // Step 3: LED5 และ LED2 ติด
+                HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2 | GPIO_PIN_5, GPIO_PIN_SET);
+                break;
+            case 4: // Step 4: LED4 และ LED3 ติด
+                HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3 | GPIO_PIN_4, GPIO_PIN_SET);
+                break;
+        }
+
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET);
+
+        step++;
+        if (step > 4)
+        {
+            step = 1;
+        }
+    }
+}
+
+
+ในโค้ดนี้ เราใช้ตัวแปร step เพื่อติดตามขั้นตอนปัจจุบัน และเมื่อทำงานในขั้นตอนที่ 4 แล้ว เราจะกลับไปที่ขั้นตอนที่ 1 ในลูป while แบบไม่มีสิ้นสุด เพื่อทำให้ LED ทำงานตามลำดับที่คุณต้องการ โปรดตรวจสอบตัวแปร GPIO_PIN_x และ __HAL_RCC_GPIOx_CLK_ENABLE() เพื่อตรงกับขา GPIO และตัวแปร GPIO_InitStruct.Mode ที่ต้องการใช้งานในโปรเจค STM32 ของคุณและแต่ละขั้นตอน LED ในลูป while จะทำงานตามลำดับที่คุณร้องขอ.
+
+การตั้งค่า Pinout ใน STM32CubeIDE เป็นขั้นตอนสำคัญเมื่อคุณต้องการกำหนดการใช้งานขา (pin) ของไมโครคอนโทรลเลอร์ STM32 ตามที่คุณต้องการ เช่นการตั้งค่าขาเป็น Input, Output, การตั้งค่า Pull-up/Pull-down, การตั้งค่าแหล่งจ่าย, และการเลือกฟังก์ชันพิเศษต่าง ๆ ของขาแต่ละขา (ที่บางครั้งเรียกว่า Alternate Function) เพื่อรองรับการใช้งานต่าง ๆ เช่น UART, SPI, I2C, TIM, และอื่น ๆ ตามความเหมาะสมของโปรเจคของคุณ
+
+ตามข้อ 1 ที่คุณต้องการตั้งค่า Pinout ใน STM32CubeIDE เพื่อควบคุม 7 LED ด้วยโปรแกรมที่มี 4 ขั้นตอนตามที่ระบุ ขอแสดงตัวอย่างการตั้งค่า Pinout ของคุณ:
+
+เปิด STM32CubeIDE และสร้างโปรเจคใหม่หรือเปิดโปรเจคที่มีอยู่ของคุณ.
+
+เลือกบอร์ดหรือไมโครคอนโทรลเลอร์ของคุณที่ต้องการใช้ จากนั้นคลิกที่ "Pinout & Configuration" ทางด้านขวาของหน้าต่าง IDE.
+
+ในหน้าต่าง Pinout & Configuration, คุณสามารถเลือกและตั้งค่าขา (pin) ตามที่คุณต้องการในเมนู "Pinout & Configuration" ทางด้านซ้าย.
+
+เพื่อตั้งค่าแต่ละขาตามที่คุณต้องการ เลือกขา (pin) ในหน้าต่าง Pinout และแก้ไขค่าต่าง ๆ ในเมนู "GPIO Configuration" ทางด้านขวาของหน้าต่าง IDE ซึ่งรวมถึงการตั้งค่า Mode (Input, Output, Alternate Function), Pull-up/Pull-down, Speed, Output Type, และ Initial State.
+
+เมื่อคุณตั้งค่าขา (pin) แล้ว คุณสามารถเลือก "Pinout" ทางด้านขวาของหน้าต่าง IDE เพื่อตั้งค่ารายละเอียดเพิ่มเติม เช่น Alternate Function (ใช้สำหรับการใช้งานแหล่งจ่ายอื่น ๆ เช่น UART, SPI, I2C, TIM), และรายละเอียดอื่น ๆ ตามความต้องการของคุณ.
+
+หลังจากที่คุณตั้งค่า Pinout ทั้งหมดตามที่คุณต้องการ คุณสามารถเรียกใช้โปรแกรมควบคุม LED ตามข้อ 1 ที่คุณต้องการใช้ได้ โปรแกรมนี้จะเข้าถึงและควบคุมขา (pin) ที่คุณตั้งค่าใน Pinout ในข้อ 1 ของคุณ.
+
+เมื่อคุณเสร็จสิ้นการตั้งค่า Pinout และโปรแกรม คุณสามารถคอมไพล์และอัปโหลดโปรแกรมลงในไมโครคอนโทรลเลอร์ของคุณเพื่อทดสอบการทำงานของ LED ตามที่คุณต้องการใช้งาน.
+
+
+
+
